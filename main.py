@@ -27,7 +27,8 @@ class DQN():
         self.state_dim = env.observation_space.shape[0]  # the shape of observation ,which in CartPole-v0 is 4
         self.action_dim = env.action_space.n  # the shape of action,which is 2 in CartPole-v0
 
-        self.create_Q_network()
+        # when construct the DQN, construct the tensorflow graph directly
+        self.create_Q_network() # create an ANN network graph
         self.create_training_method()
 
         self.session = tf.InteractiveSession()
@@ -36,16 +37,17 @@ class DQN():
 
     # Q = W2*g(W1*x+b1) + b2
     def create_Q_network(self):
-        W1 = self.weight_variable([self.state_dim,20])
-        b1 = self.bias_variable([20])
-        W2 = self.weight_variable([20,self.action_dim])
+        self.hidden_num = 20
+        W1 = self.weight_variable([self.state_dim,self.hidden_num])
+        b1 = self.bias_variable([self.hidden_num])
+        W2 = self.weight_variable([self.hidden_num,self.action_dim])
         b2 = self.bias_variable([self.action_dim])
         # input layer
         self.state_input = tf.placeholder("float",[None,self.state_dim])
         # hidden layers
         h_layer = tf.nn.relu(tf.matmul(self.state_input,W1) + b1)
         # Q Value layer
-        self.Q_value = tf.matmul(h_layer,W2) + b2
+        self.Q_value = tf.matmul(h_layer,W2) + b2  # None*action_dim
 
     def weight_variable(self,shape):
         initial = tf.truncated_normal(shape)
@@ -55,9 +57,12 @@ class DQN():
         initial = tf.constant(0.01,shape = shape)
         return tf.Variable(initial)
 
+    # what is this method used for?
     def create_training_method(self):
         self.action_input = tf.placeholder("float",[None,self.action_dim])
         self.y_input = tf.placeholder("float",[None])
+
+        #  dot multiply, multiply the corresponding elements between Q_value and action_input
         Q_action = tf.reduce_sum(tf.multiply(self.Q_value,self.action_input),reduction_indices = 1)
         self.cost = tf.reduce_mean(tf.square(self.y_input - Q_action))
         self.optimizer = tf.train.AdamOptimizer(0.0001).minimize(self.cost)
