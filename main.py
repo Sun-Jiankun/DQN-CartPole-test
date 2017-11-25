@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+# 刚开始当网络的表达能力差的时候 Qvalue的度量能力差 随着训练次数的增多,神经网络的度量能力在变好?(什么叫变好) 还有为什么随着训练批次的增多，神经网络的训练效果会变好?
 import gym
 import tensorflow as tf
 import numpy as np
@@ -29,13 +30,14 @@ class DQN():
 
         # when construct the DQN, construct the tensorflow graph directly
         self.create_Q_network() # create an ANN network graph
-        self.create_training_method()
+        self.create_training_method() # define the variables for the graph
 
         self.session = tf.InteractiveSession()
         self.session.run(tf.global_variables_initializer())
 
 
-    # Q = W2*g(W1*x+b1) + b2
+    # Q = W2*g(W1*x+b1) + b2   x:state_input 1*4
+    # use the neural network to model the relationship between state and Q
     def create_Q_network(self):
         self.hidden_num = 20
         W1 = self.weight_variable([self.state_dim,self.hidden_num])
@@ -47,7 +49,7 @@ class DQN():
         # hidden layers
         h_layer = tf.nn.relu(tf.matmul(self.state_input,W1) + b1)
         # Q Value layer
-        self.Q_value = tf.matmul(h_layer,W2) + b2  # None*action_dim
+        self.Q_value = tf.matmul(h_layer,W2) + b2  # None*action_dim  each column represents the Q after the row elements pick the action column elements
 
     def weight_variable(self,shape):
         initial = tf.truncated_normal(shape)
@@ -57,16 +59,18 @@ class DQN():
         initial = tf.constant(0.01,shape = shape)
         return tf.Variable(initial)
 
-    # what is this method used for?
+    # this method:just define some variables
     def create_training_method(self):
-        self.action_input = tf.placeholder("float",[None,self.action_dim])
+        self.action_input = tf.placeholder("float",[None,self.action_dim])  # should be a ont-hot array
         self.y_input = tf.placeholder("float",[None])
 
         #  dot multiply, multiply the corresponding elements between Q_value and action_input
-        Q_action = tf.reduce_sum(tf.multiply(self.Q_value,self.action_input),reduction_indices = 1)
+        Q_action = tf.reduce_sum(tf.multiply(self.Q_value,self.action_input),axis = 1)
         self.cost = tf.reduce_mean(tf.square(self.y_input - Q_action))
         self.optimizer = tf.train.AdamOptimizer(0.0001).minimize(self.cost)
 
+        # add 5 tuple(wuyuanzu) into replay_buffer
+        # and when the replay_buffer reaches BATCH_SIZE,train Q _network
     def perceive(self,state,action,reward,next_state,done):
         one_hot_action = np.zeros(self.action_dim) # save action with one hot way
         one_hot_action[action] = 1
@@ -80,20 +84,25 @@ class DQN():
 
     def train_Q_network(self):
         self.time_step += 1
+        # select Batch_size elements from replay_buffer randomly
         minibatch = random.sample(self.replay_buffer,BATCH_SIZE)
-        state_batch = [data[0] for data in minibatch]
-        action_batch = [data[1] for data in minibatch]
-        reward_batch = [data[2] for data in minibatch]
-        next_state_batch = [data[3] for data in minibatch]
+        state_batch = [data[0] for data in minibatch] # current_state
+        action_batch = [data[1] for data in minibatch] # get an action by e-greedy algrithm
+        reward_batch = [data[2] for data in minibatch] # current_state will get reward by action
+        next_state_batch = [data[3] for data in minibatch] # the next state will be reached after current state take action
 
         y_batch = []
         Q_value_batch = self.Q_value.eval(feed_dict = {self.state_input:next_state_batch})
-        for i in range(0,BATCH_SIZE):
+        for i in range(0,BATCH_SIE):
             done = minibatch[i][4]
+
+            ## only the aim reaches,this action has a reward
             if done:
                 y_batch.append(reward_batch[i])
             else :
                 y_batch.append(reward_batch[i] + GAMMA*np.max(Q_value_batch[i]))
+
+
         self.optimizer.run(feed_dict={
             self.y_input:y_batch,
             self.action_input:action_batch,
@@ -105,10 +114,14 @@ class DQN():
         Q_value = self.Q_value.eval(feed_dict = {
             self.state_input:[state]
             })[0]
-        if random.random() <= self.epsilon:
+        if random.random() <= self.epsilon: #  random.random random number between [0,1)
             return random.randint(0,self.action_dim - 1)
+              # random.randint return a random integer N that   a<=N<=b
         else:
-            return np.argmax(Q_value)
+            return np.argmax(Q_value) # if Q_value is a vector ,that's each time just takes a action as the input,this return the action makes the Q max ,but whether each  time it is just an action is input??????
+
+
+        ## how this statement is exec? is it each time this function is run, this statement went once? how to deal the relationship between tensorflow and original python
         self.epsilon -= (INITIAL_EPSILON - FINAL_EPSILON)/10000
 
     # output depends on the neural network
@@ -129,7 +142,9 @@ def main():
         state = env.reset()  # output : an array whose dimension is 1*4
         # Train            # in each eposide train 300 steps
         for step in range(STEP):
+            # get an action by untrained random network
             action = agent.egreedy_action(state) # e-greedy action for train
+
             next_state,reward,done,_ = env.step(action)
             # Define reward for agent
             reward_agent = -1 if done else 0.1
